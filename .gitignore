@@ -41,3 +41,4 @@ stabilifps-benchmarks/
 !releases/*.jar
 hs_err_pid*
 replay_pid*
+*.log
