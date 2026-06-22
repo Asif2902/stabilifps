@@ -27,20 +27,34 @@ import net.minecraft.client.Minecraft;
  * </ul>
  */
 public final class AdaptiveRenderDistance {
+    /**
+     * How long (ms) to freeze frame-time measurement AND skip re-evaluation
+     * after a render-distance change. Changing RD triggers a Minecraft chunk
+     * reload, which itself causes a frame-time spike; without a freeze that
+     * spike would be read as "degradation" and force another change — the
+     * self-amplifying "chunk flash" loop.
+     */
+    private static final long CHANGE_COOLDOWN_MS = 4000;
+
     private static int degradeStreak = 0;
     private static int stableStreak = 0;
     private static int lastApplied = -1;
     private static int maxTarget = -1;
+    private static long lastChangeNanos = 0L;
+    private static boolean firstSeedDone = false;
 
     private AdaptiveRenderDistance() {}
 
     public static void init() {
         degradeStreak = 0;
         stableStreak = 0;
+        lastChangeNanos = 0L;
+        firstSeedDone = false;
         try {
             int cur = currentRd();
             maxTarget = StabiliConfig.clamp(cur, cfg().minRenderDistance, cfg().maxRenderDistance);
             lastApplied = cur;
+            firstSeedDone = true;
             StabiliLog.info("AdaptiveRenderDistance: starting RD=%d, ceiling=%d", cur, maxTarget);
         } catch (Throwable t) {
             StabiliLog.warn("AdaptiveRenderDistance: could not read current render distance: %s", t.getMessage());
@@ -58,12 +72,14 @@ public final class AdaptiveRenderDistance {
         } catch (Throwable ignored) {}
         degradeStreak = 0;
         stableStreak = 0;
+        lastChangeNanos = 0L;
         StabiliLog.info("AdaptiveRenderDistance toggled -> %b", cfg().adaptiveRenderDistance);
     }
 
     public static void tick(Minecraft mc) {
         StabiliConfig c = cfg();
         if (!c.enabled || !c.adaptiveRenderDistance || mc.level == null || mc.player == null) return;
+        if (!firstSeedDone) return;
 
         int current;
         try {
@@ -73,11 +89,23 @@ public final class AdaptiveRenderDistance {
         }
 
         // Detect external (user) changes and adopt them as the new ceiling.
+        // After our own change we also set lastApplied, so we won't mistake our
+        // own write for a user change here.
         if (lastApplied >= 0 && current != lastApplied) {
             int adopted = StabiliConfig.clamp(current, c.minRenderDistance, c.maxRenderDistance);
             if (adopted > maxTarget) maxTarget = adopted;
             lastApplied = current;
+            // The user just changed RD — that reloads chunks too. Freeze.
+            FrameTimeTracker.ignoreFor(CHANGE_COOLDOWN_MS);
+            lastChangeNanos = System.nanoTime();
+            degradeStreak = 0;
+            stableStreak = 0;
         }
+
+        // Cooldown: never re-evaluate while a previous change's chunk reload is
+        // still settling, and never change RD more often than the cooldown.
+        long now = System.nanoTime();
+        if (lastChangeNanos > 0 && (now - lastChangeNanos) / 1_000_000L < CHANGE_COOLDOWN_MS) return;
 
         boolean degraded = FrameTimeTracker.isDegraded();
         double avg = FrameTimeTracker.avgMs();
@@ -111,6 +139,10 @@ public final class AdaptiveRenderDistance {
             try {
                 mc.options.renderDistance().set(desired);
                 lastApplied = desired;
+                // Changing RD reloads chunks → freeze measurement for the reload
+                // spike and start the cooldown so we don't re-trigger.
+                FrameTimeTracker.ignoreFor(CHANGE_COOLDOWN_MS);
+                lastChangeNanos = System.nanoTime();
             } catch (Throwable t) {
                 StabiliFPS.LOGGER.warn("AdaptiveRD: failed to set render distance: {}", t.getMessage());
             }

@@ -48,7 +48,25 @@ public final class FrameTimeTracker {
     private static int hitchSize = 0;
     private static int totalHitches = 0;
 
+    // Measurement-freeze window. When an active intervention (render-distance
+    // change, framerate-cap change, chunk reload) is happening, its own spike
+    // would otherwise be measured as "degradation" and trigger a self-amplifying
+    // feedback loop. ignoreUntilNanos lets a subsystem tell us "don't trust the
+    // next N ms of samples" so the loop cannot feed on itself.
+    private static long ignoreUntilNanos = 0L;
+
     private FrameTimeTracker() {}
+
+    /**
+     * Freeze measurement for the next {@code millis} milliseconds. Use this
+     * immediately after any action that itself causes a frame-time spike
+     * (render-distance change, chunk reload, cap change) so the spike is not
+     * counted as real workload and fed back into the adaptive logic.
+     */
+    public static void ignoreFor(long millis) {
+        long until = System.nanoTime() + millis * 1_000_000L;
+        if (until > ignoreUntilNanos) ignoreUntilNanos = until;
+    }
 
     public static void init() {
         int n = Math.max(60, StabiliConfig.get().frameSampleCount);
@@ -72,6 +90,16 @@ public final class FrameTimeTracker {
         // firing within one frame (<1ms apart), and (b) absurd values (pause,
         // focus loss, first frame) so they don't poison the statistics.
         if (delta < 1_000_000L || delta > 1_000_000_000L) return;
+
+        // During an active intervention (see ignoreFor), drop samples entirely
+        // so the intervention's own spike cannot be read back as degradation.
+        if (nowNanos < ignoreUntilNanos) {
+            // Keep the hitch window seeded but do not pollute the main window.
+            recentForHitch[hitchHead] = delta;
+            hitchHead = (hitchHead + 1) % HITCH_WINDOW;
+            if (hitchSize < HITCH_WINDOW) hitchSize++;
+            return;
+        }
 
         frames[head] = delta;
         head = (head + 1) % frames.length;

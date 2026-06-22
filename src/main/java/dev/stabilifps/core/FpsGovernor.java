@@ -27,15 +27,23 @@ import net.minecraft.client.Minecraft;
 public final class FpsGovernor {
     private static final int UNLIMITED = 260; // Minecraft encodes "Unlimited" as 260 on the slider
     private static final int STEP = 10;
+    /**
+     * After a cap change, freeze frame-time measurement for this long so the
+     * transition itself is not read as a stutter. Cap changes don't reload
+     * chunks, but the first few frames at the new rate are noisy.
+     */
+    private static final long CHANGE_FREEZE_MS = 2000;
 
     private static long lastEvalNanos = 0L;
     private static int lastApplied = -1;
     private static int lastEvaluatedLow1 = -1;
+    private static long lastChangeNanos = 0L;
 
     private FpsGovernor() {}
 
     public static void init() {
         lastEvalNanos = System.nanoTime();
+        lastChangeNanos = 0L;
         try {
             lastApplied = currentCap();
             StabiliLog.info("FpsGovernor: starting cap=%d, range=[%d..%s]",
@@ -65,7 +73,14 @@ public final class FpsGovernor {
         // Detect the user changing the cap manually and adopt it as a baseline.
         if (lastApplied >= 0 && current != lastApplied) {
             lastApplied = current;
+            // User-driven change; let it settle before we measure again.
+            FrameTimeTracker.ignoreFor(CHANGE_FREEZE_MS);
+            lastChangeNanos = System.nanoTime();
         }
+
+        // Skip evaluation while a recent change is still settling.
+        long nowMs = System.currentTimeMillis();
+        if (lastChangeNanos > 0 && nowMs - (lastChangeNanos / 1_000_000L) < CHANGE_FREEZE_MS) return;
 
         double avg = FrameTimeTracker.avgMs();
         double low1Ms = avgMsToLow1();
@@ -100,6 +115,10 @@ public final class FpsGovernor {
             try {
                 mc.options.framerateLimit().set(desired);
                 lastApplied = desired;
+                // Freeze measurement for the transition so the cap change
+                // itself is not read back as a stutter.
+                FrameTimeTracker.ignoreFor(CHANGE_FREEZE_MS);
+                lastChangeNanos = System.nanoTime();
             } catch (Throwable t) {
                 StabiliLog.warn("Governor: failed to set cap: %s", t.getMessage());
             }

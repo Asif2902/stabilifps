@@ -51,13 +51,13 @@ public final class StabiliConfig {
     /** Ceiling the adaptive system will never exceed (also respects user's setting). */
     public int maxRenderDistance = 32;
     /** Frame time (ms) above which the system starts shrinking render distance. */
-    public double degradeThresholdMs = 33.0;   // ~30 FPS sustained
+    public double degradeThresholdMs = 40.0;   // ~25 FPS sustained
     /** Frame time (ms) below which the system starts growing render distance back. */
-    public double recoverThresholdMs = 20.0;   // ~50 FPS sustained
+    public double recoverThresholdMs = 22.0;   // ~45 FPS sustained
     /** How many consecutive samples must confirm a transition (hysteresis, prevents flapping). */
-    public int hysteresisSamples = 40;
-    /** Render-distance step per adjustment (chunks). */
-    public int rdStep = 2;
+    public int hysteresisSamples = 240;
+    /** Render-distance step per adjustment (chunks). Keep small: every step reloads chunks. */
+    public int rdStep = 1;
 
     // ── Adaptive framerate cap (FpsGovernor) ────────────────────────────────
     /** Find the framerate cap that maximises the 1% low / minimises variance. */
@@ -69,7 +69,7 @@ public final class StabiliConfig {
     /** How aggressively to react to variance (0.0..1.0). */
     public double governorAggression = 0.5;
     /** Seconds between cap re-evaluations. */
-    public int capReevaluateIntervalSec = 5;
+    public int capReevaluateIntervalSec = 10;
 
     // ── Entity culling ──────────────────────────────────────────────────────
     /** Skip rendering entities beyond this distance (in blocks), 0 = off. */
