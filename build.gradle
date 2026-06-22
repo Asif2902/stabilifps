@@ -1,0 +1,76 @@
+plugins {
+    // 26.1 note: the plugin id changed from "fabric-loom" to "net.fabricmc.fabric-loom"
+    // (see https://docs.fabricmc.net/develop/porting). Loom 1.14+ supports the
+    // non-obfuscated Minecraft 26.x line.
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url = 'https://maven.fabricmc.net/' }
+    mavenCentral()
+}
+
+loom {
+    // NOTE: we intentionally do NOT call splitEnvironmentSourceSets() here.
+    // Splitting moves the Minecraft client classpath onto a dedicated `client`
+    // sourceSet (src/client/java) and leaves `main` without Minecraft. Since
+    // StabiliFPS is 100% client-side, we keep everything in `src/main/java`
+    // so the main sourceSet carries the full Minecraft classpath.
+    mods {
+        "stabilifps" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // Minecraft itself — resolved by Loom from Mojang's meta.
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+    // 26.1 is NON-OBFUSCATED: no Yarn/intermediary mappings dependency is needed,
+    // and the old `modImplementation`/`modApi`/`modCompileOnly` helpers are replaced
+    // by plain `implementation`/`api`/`compileOnly`.
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "loader_version", project.loader_version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version": project.minecraft_version,
+                "loader_version": project.loader_version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // 26.1 requires Java 25 (see Fabric "Porting to 26.1" guide).
+    it.options.release = 25
+    it.options.encoding = 'UTF-8'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+    withSourcesJar()
+}
+
+// 26.1 note: the `remapJar` task is gone; the plain `jar` task produces the
+// final mod artifact because no remapping is needed.
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.archives_base_name}" }
+    }
+    archiveClassifier = ''
+}

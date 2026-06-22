@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "stabilifps",
+  "version": "${version}",
+  "name": "StabiliFPS",
+  "description": "Sodium's best companion. StabiliFPS takes the high average FPS that Sodium/Lithium give you and makes it STABLE — killing the sudden 100 -> 8 -> 100 stutter by adapting render distance, framerate cap and entity culling to the live frame budget. Includes a live HUD (1% lows, frame-time sparkline, GC pauses) and a built-in A/B benchmark harness that exports reproducible reports. Designed to compose with every other perf mod; every feature is independently toggleable.",
+  "authors": [
+    "StabiliFPS"
+  ],
+  "contact": {
+    "homepage": "https://github.com/stabilifps/stabilifps",
+    "sources": "https://github.com/stabilifps/stabilifps",
+    "issues": "https://github.com/stabilifps/stabilifps/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/stabilifps/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.stabilifps.StabiliFPS"
+    ]
+  },
+  "mixins": [
+    "stabilifps.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19",
+    "fabric-api": "*",
+    "minecraft": "~26.1",
+    "java": ">=25"
+  },
+  "recommends": {
+    "sodium": "*",
+    "lithium": "*",
+    "ferritecore": "*"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "entityculling": "*",
+    "modernfix": "*"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "category.stabilifps": "StabiliFPS",
+  "key.stabilifps.config": "Open Config",
+  "key.stabilifps.hud": "Toggle Stability HUD",
+  "key.stabilifps.toggle_adaptive": "Toggle Adaptive Render Distance",
+  "key.stabilifps.toggle_mod": "Toggle Mod On/Off"
+}

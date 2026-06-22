@@ -1,0 +1,43 @@
+# Gradle
+.gradle/
+build/
+out/
+target/
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+run/
+
+# IDE - Eclipse
+.classpath
+.project
+.settings/
+bin/
+*.launch
+
+# IDE - VS Code
+.vscode/
+.history/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Minecraft / Fabric (runtime artifacts, not source)
+logs/
+crash-reports/
+saves/
+config/stabilifps.json
+stabilifps-benchmarks/
+
+# Java
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+!releases/*.jar
+hs_err_pid*
+replay_pid*
