@@ -3,14 +3,14 @@
   "id": "stabilifps",
   "version": "${version}",
   "name": "StabiliFPS",
-  "description": "Sodium's best companion. StabiliFPS takes the high average FPS that Sodium/Lithium give you and makes it STABLE — killing the sudden 100 -> 8 -> 100 stutter by adapting render distance, framerate cap and entity culling to the live frame budget. Includes a live HUD (1% lows, frame-time sparkline, GC pauses) and a built-in A/B benchmark harness that exports reproducible reports. Designed to compose with every other perf mod; every feature is independently toggleable.",
+  "description": "Sodium raises your ceiling, StabiliFPS raises your floor. A client-side Fabric mod focused purely on frame-time STABILITY — not average FPS. It kills the sudden 100 -> 8 -> 100 stutter by pacing chunk-mesh bursts across frames, deferring allocating work before GC pauses, and measuring the metrics that actually matter (1% low, 0.1% low, variance) on a live HUD that tells you WHY each frame dropped (chunk / gc / entity). Designed to never compromise gameplay: the render-distance governor only ever RAISES render distance (never lowers yours), and every gameplay-affecting feature is off by default or strictly additive. Composes with every other perf mod; every feature is independently toggleable. Zero-config safe out of the box.",
   "authors": [
     "StabiliFPS"
   ],
   "contact": {
-    "homepage": "https://github.com/stabilifps/stabilifps",
-    "sources": "https://github.com/stabilifps/stabilifps",
-    "issues": "https://github.com/stabilifps/stabilifps/issues"
+    "homepage": "https://github.com/Asif2902/stabilifps",
+    "sources": "https://github.com/Asif2902/stabilifps",
+    "issues": "https://github.com/Asif2902/stabilifps/issues"
   },
   "license": "MIT",
   "icon": "assets/stabilifps/icon.png",

@@ -17,6 +17,16 @@ import java.nio.file.Path;
  * subsystems can read/write them directly. The file is JSON and lives at
  * {@code config/stabilifps.json}. Unknown keys are ignored on load so the mod
  * stays forward-compatible.</p>
+ *
+ * <h2>Zero-config safe defaults</h2>
+ * <p>Out of the box, on a fresh install, the mod is <b>pure-good</b>: it
+ * measures honestly and paces chunk loads, but never changes anything the
+ * player can see or feel against their will. Every gameplay-affecting
+ * intervention is either off by default or strictly additive (the render
+ * distance governor only ever <i>raises</i> RD, never lowers it — see
+ * {@code rdGovernor}). A player can install StabiliFPS and immediately get
+ * smoother frames with zero config. {@link #resetToRecommended()} restores
+ * these exact values.</p>
  */
 public final class StabiliConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -34,34 +44,49 @@ public final class StabiliConfig {
     // ── General ─────────────────────────────────────────────────────────────
     /** Master kill-switch for every active intervention. */
     public boolean enabled = true;
-    /** Show the on-screen stability HUD overlay. Hidden by default; press F7 to show. */
-    public boolean showHud = false;
-    /** Compact HUD (one line) vs full HUD (graph + breakdown). */
-    public boolean hudCompact = false;
+    /** Show the on-screen stability HUD overlay. ON by default (compact mode). */
+    public boolean showHud = true;
+    /** Compact HUD (one line) vs full HUD (graph + breakdown). Compact by default. */
+    public boolean hudCompact = true;
 
     // ── Frame-time tracking ─────────────────────────────────────────────────
     /** How many recent frame samples to keep (ring buffer size). */
     public int frameSampleCount = 240;
 
-    // ── Adaptive render distance ────────────────────────────────────────────
-    /** Dynamically lower render distance when frame time degrades, restore when stable. */
-    public boolean adaptiveRenderDistance = true;
-    /** Floor the adaptive system will never go below. */
-    public int minRenderDistance = 4;
-    /** Ceiling the adaptive system will never exceed (also respects user's setting). */
+    // ── Render-distance governor (player floor; ONLY raises) ────────────────
+    /**
+     * Raise render distance towards {@code maxRenderDistance} when performance
+     * is healthy. <b>Never lowers</b> it — the player's value is a hard floor.
+     * ON by default because it can only do good.
+     */
+    public boolean rdGovernor = true;
+    /** Ceiling the governor will never exceed. It never goes below the player's value. */
     public int maxRenderDistance = 32;
-    /** Frame time (ms) above which the system starts shrinking render distance. */
-    public double degradeThresholdMs = 40.0;   // ~25 FPS sustained
-    /** Frame time (ms) below which the system starts growing render distance back. */
-    public double recoverThresholdMs = 22.0;   // ~45 FPS sustained
-    /** How many consecutive samples must confirm a transition (hysteresis, prevents flapping). */
+    /** Frame time (ms) above which the governor freezes growth (does NOT lower RD). */
+    public double degradeThresholdMs = 40.0;
+    /** Frame time (ms) below which the governor accumulates a healthy streak. */
+    public double recoverThresholdMs = 22.0;
+    /** Healthy ticks required before raising (long, to avoid needless chunk reloads). */
     public int hysteresisSamples = 240;
-    /** Render-distance step per adjustment (chunks). Keep small: every step reloads chunks. */
+    /** Render-distance step per raise (chunks). Small, since each step reloads chunks. */
     public int rdStep = 1;
 
-    // ── Adaptive framerate cap (FpsGovernor) ────────────────────────────────
-    /** Find the framerate cap that maximises the 1% low / minimises variance. */
-    public boolean adaptiveCap = true;
+    // ── Chunk-load pacer (paces chunk-mesh bursts across frames) ────────────
+    /**
+     * Spread chunk-mesh upload bursts across frames so loading fresh terrain
+     * doesn't dominate the frame budget. ON by default; can only smooth, never
+     * reduces what the player sees. Pure-good.
+     */
+    public boolean chunkPacer = true;
+    /** Per-frame budget for chunk uploads (microseconds) in NORMAL mode. */
+    public long chunkPacerFrameBudgetMicros = 1500;
+
+    // ── Adaptive framerate cap (FpsGovernor) — OFF by default ───────────────
+    /**
+     * Adjust the framerate cap to maximise 1% low. OFF by default because it
+     * changes a setting the player chose; opt in only if desired.
+     */
+    public boolean adaptiveCap = false;
     /** Hard floor for the cap (never cap below this). */
     public int minCap = 60;
     /** Hard ceiling for the cap (never cap above this; 0 = unlimited). */
@@ -71,21 +96,29 @@ public final class StabiliConfig {
     /** Seconds between cap re-evaluations. */
     public int capReevaluateIntervalSec = 10;
 
-    // ── Entity culling ──────────────────────────────────────────────────────
-    /** Skip rendering entities beyond this distance (in blocks), 0 = off. */
-    public boolean entityCull = true;
+    // ── Entity culling — OFF by default ─────────────────────────────────────
+    /**
+     * Skip rendering far/tiny entities. OFF by default because it pops visible
+     * entities, which can be confusing; opt in only if desired.
+     */
+    public boolean entityCull = false;
     /** Hard distance beyond which entities are never rendered. */
     public int entityCullDistance = 96;
     /** Cull small entities (item frames, items, xp orbs) earlier than this distance. */
     public int smallEntityCullDistance = 48;
 
-    // ── GC monitoring ───────────────────────────────────────────────────────
+    // ── GC monitoring + allocation ──────────────────────────────────────────
     /** Track GC pauses and surface them on the HUD / log. */
     public boolean gcMonitor = true;
     /** Log a warning when a single GC pause exceeds this many ms. */
     public double gcPauseWarnMs = 40.0;
     /** Log recommended JVM flags to the console on startup. */
     public boolean printGcAdvice = true;
+    /**
+     * Defer non-critical, allocating work by one frame when the young
+     * generation is near a GC boundary. Pure-good; can only reduce pauses.
+     */
+    public boolean gcAwareDeferral = true;
 
     private StabiliConfig() {}
 
@@ -117,6 +150,15 @@ public final class StabiliConfig {
         } catch (IOException e) {
             StabiliLog.error("Failed to save config: %s", e.getMessage());
         }
+    }
+
+    /**
+     * Restore the zero-config safe defaults (the values documented above). The
+     * config screen exposes this as "Reset to recommended".
+     */
+    public static void resetToRecommended() {
+        INSTANCE = new StabiliConfig();
+        save();
     }
 
     /** Clamp helper used by config screen sliders. */

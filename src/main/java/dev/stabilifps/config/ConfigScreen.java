@@ -34,7 +34,7 @@ public class ConfigScreen extends Screen {
     private static final int ROW_H = 22;
     private static final int PAD = 8;
     private static final int TITLE_H = 24;     // reserved top band for the title
-    private static final int FOOTER_H = 28;    // reserved bottom band for Done
+    private static final int FOOTER_H = 32;    // reserved bottom band for Reset + Done
 
     private int centerX;
     private int contentW;
@@ -76,14 +76,17 @@ public class ConfigScreen extends Screen {
         addToggle("Show HUD (F7)", () -> cfg().showHud, v -> cfg().showHud = v);
         addToggle("Compact HUD", () -> cfg().hudCompact, v -> cfg().hudCompact = v);
 
-        section("Adaptive render distance");
-        addToggle("Adaptive RD (F8)", () -> cfg().adaptiveRenderDistance, v -> cfg().adaptiveRenderDistance = v);
-        addStepper("Min RD", () -> cfg().minRenderDistance,
-                v -> cfg().minRenderDistance = StabiliConfig.clamp(v, 2, 24), 2, 2, 24);
+        section("Render-distance governor (raise-only; never lowers your RD)");
+        addToggle("RD governor (F8)", () -> cfg().rdGovernor, v -> cfg().rdGovernor = v);
         addStepper("Max RD", () -> cfg().maxRenderDistance,
                 v -> cfg().maxRenderDistance = StabiliConfig.clamp(v, 4, 64), 2, 4, 64);
         addStepper("Degrade threshold (ms)", () -> (int) cfg().degradeThresholdMs,
                 v -> cfg().degradeThresholdMs = StabiliConfig.clamp((double) v, 16, 100), 1, 16, 100);
+
+        section("Chunk-load pacer");
+        addToggle("Chunk pacer", () -> cfg().chunkPacer, v -> cfg().chunkPacer = v);
+        addStepper("Frame budget (us)", () -> (int) cfg().chunkPacerFrameBudgetMicros,
+                v -> cfg().chunkPacerFrameBudgetMicros = StabiliConfig.clamp(v, 200, 8000), 100, 200, 8000);
 
         section("Adaptive framerate cap");
         addToggle("Adaptive cap", () -> cfg().adaptiveCap, v -> cfg().adaptiveCap = v);
@@ -99,16 +102,21 @@ public class ConfigScreen extends Screen {
         addStepper("Small entity cull distance", () -> cfg().smallEntityCullDistance,
                 v -> cfg().smallEntityCullDistance = StabiliConfig.clamp(v, 8, 128), 4, 8, 128);
 
-        section("GC monitoring");
+        section("GC monitoring + allocation");
         addToggle("GC monitor", () -> cfg().gcMonitor, v -> cfg().gcMonitor = v);
         addToggle("Print GC advice", () -> cfg().printGcAdvice, v -> cfg().printGcAdvice = v);
+        addToggle("GC-aware deferral", () -> cfg().gcAwareDeferral, v -> cfg().gcAwareDeferral = v);
 
         contentHeight = layoutY;
 
-        // Done button, pinned at the bottom of the footer band.
-        int doneY = this.height - FOOTER_H + 4;
+        // Footer: Reset to recommended (left) + Done (right), pinned.
+        int footY = this.height - FOOTER_H + 4;
+        addRenderableWidget(Button.builder(Component.literal("Reset to recommended"), b -> {
+            StabiliConfig.resetToRecommended();
+            this.rebuildWidgets();
+        }).bounds(centerX - 175, footY, 160, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Done"), b -> this.onClose())
-                .bounds(centerX - 60, doneY, 120, 20).build());
+                .bounds(centerX + 15, footY, 120, 20).build());
 
         // Clamp scroll in case the viewport shrank (window resize).
         scroll = Math.max(0, Math.min(scroll, maxScroll()));

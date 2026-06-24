@@ -2,6 +2,8 @@
 
 **A frame-time stabiliser mod for Minecraft Java Edition 26.1+ (Fabric).**
 
+> **Sodium raises your ceiling. StabiliFPS raises your floor.**
+
 StabiliFPS does not try to raise your *average* FPS — Sodium, Lithium and
 friends already do that well. Instead it chases a **flat frame-time graph**:
 its single goal is to prevent the sudden `100 -> 8 -> 100` FPS stutter that
@@ -14,39 +16,67 @@ stabilised for as long as possible.
 
 ---
 
+## Design philosophy
+
+**Measure honestly. Intervene surgically. Never compromise gameplay.**
+
+Every feature is either **pure-good** (measures or paces and cannot degrade
+your gameplay) or **opt-in** (changes something you can see). The one
+gameplay-affecting system that ships ON by default — the render-distance
+governor — is **strictly additive**: it only ever *raises* render distance when
+your GPU is comfortable, and **never lowers it below what you chose**. Your
+render distance is a hard floor. This makes the old "chunk flash" feedback loop
+structurally impossible.
+
+This philosophy came directly from a bug in v1.0: the adaptive systems changed
+render distance / framerate cap live in-world, and because changing render
+distance reloads chunks, that *caused* the stutter the mod existed to fix. v1.1
+removes every code path that lowers your settings.
+
+---
+
 ## Why this mod exists
 
-A lot of players sit at a comfortable 100–300 FPS, but every few seconds the
-framerate collapses to single digits for a frame or two and snaps back. That
-hiccup is what feels "laggy" — not the average rate. StabiliFPS attacks the
-four real causes of those drops:
+Players sit at a comfortable 100–300 FPS, but every few seconds the framerate
+collapses to single digits for a frame or two and snaps back. That hiccup is
+what feels "laggy" — not the average rate. Research and community reports (and
+[Mojang bug MC-166005](https://bugs.mojang.com/browse/MC/issues/MC-166005))
+point at the same root cause: **chunk-meshing bursts** when you fly fast,
+teleport, or cross into fresh terrain. Existing perf mods *speed up* meshing;
+nobody *paces* it. StabiliFPS does.
 
 | Cause of the drop | What StabiliFPS does |
 |---|---|
-| Chunk geometry stops fitting the frame budget | **Adaptive render distance** shrinks RD *before* the drop deepens, then grows it back with hysteresis |
-| GPU burst → driver-queue stall → burst oscillation | **Adaptive framerate cap** hill-climbs toward the cap that maximises the 1% low |
-| Dense entity scenes (farms, spawn chunks) | **Distance entity cull** drops far / tiny entities from the render list |
-| Garbage-collection stop-the-world pauses | **GC monitor** tracks real pause durations and prints recommended JVM flags |
+| Chunk-mesh upload bursts dominate a frame | **Chunk-load pacer** spreads the burst across frames against an adaptive µs budget |
+| GC stop-the-world pauses from allocation pressure | **Allocation budget** defers non-critical allocating work when a GC is imminent; **GC monitor** tracks real pauses |
+| You set RD too high for your hardware | **Render-distance governor** raises RD when healthy and *only ever raises it* — on degradation it tells you, it never lowers your setting |
+| Want a tighter frame pacing | **Adaptive framerate cap** (opt-in) hill-climbs toward the cap that maximises the 1% low |
 
-Everything is visible on a live HUD so you can *see* the stabilisation working.
+Everything is visible on a live HUD that tells you **why** each frame dropped
+(`chunk` / `gc` / `entity`), so the mod is transparent rather than mysterious.
 
 ---
 
 ## Features
 
 - **Frame-time tracker** — 240-sample ring buffer computing average FPS, **1% low**,
-  **0.1% low**, frame-time variance, hitch count, and a 0–100 stability score.
-- **Adaptive render distance** — proactively lowers RD when frame time degrades,
-  restores it when stable, with hysteresis + a floor so it never flaps or starves you.
-- **Adaptive framerate cap** — finds the cap with the best 1% low / lowest variance
-  for your current scene and hardware, and re-converges when the load changes.
-- **Entity cull** — skips entities beyond a configurable distance (small entities
-  culled even earlier), via a clean mixin on `ClientLevel.entitiesForRendering`.
+  **0.1% low**, frame-time variance, hitch count, and a documented 0–100
+  stability score (weighted: 1% low 40%, variance 25%, 0.1% low 20%, headroom 15%).
+- **Render-distance governor** — raises RD toward your configured max when frame
+  time is healthy; **never lowers it**. On degradation it freezes growth and hints
+  that your RD may be too high. Your chosen RD is always respected.
+- **Chunk-load pacer** — adaptive per-frame upload budget. Throttles when frame
+  time is degraded, full-throttle during initial world load (so the world appears
+  fast), normal otherwise. The headline white-space feature no other mod has.
+- **Allocation budget** — defers non-critical allocating work by one frame when
+  the young generation is near a GC boundary. Pure-good; can only reduce pauses.
 - **GC monitor** — JMX-based, records the *actual duration* of every GC pause,
-  warns on long pauses, and prints Aikar's-flag-style advice to the console.
+  warns on long pauses, attributes those hitches, and prints JVM-flag advice.
+- **Entity cull** *(opt-in)* — skips entities beyond a configurable distance.
 - **Stability HUD** — overlay with FPS, 1% low, variance, hitch count, GC stats,
-  active interventions, and a colour-coded frame-time sparkline.
-- **In-game config screen** — every tunable is adjustable live (F6).
+  the **why-it-stuttered tag**, active interventions, and a frame-time sparkline.
+- **In-game config screen** — every tunable adjustable live, scrollable, with a
+  **Reset to recommended** button (F6).
 
 ---
 
@@ -57,18 +87,22 @@ Everything is visible on a live HUD so you can *see* the stabilisation working.
 2. Download **Fabric API** for 26.1.2 from
    [Modrinth](https://modrinth.com/mod/fabric-api/versions) and drop it in
    `.minecraft/mods`.
-3. Drop `stabilifps-1.0.0.jar` into `.minecraft/mods`.
+3. Drop `stabilifps-1.1.0.jar` into `.minecraft/mods`.
 4. Launch Minecraft with the Fabric profile.
 
 **Requirements:** Minecraft 26.1.2 · Java 25 · Fabric Loader 0.19+ · Fabric API.
+
+Out of the box the mod is **zero-config safe**: the HUD and GC monitor are on,
+the RD governor is on (raise-only), the chunk pacer is on, and the cap / entity
+cull are off. Install it and you immediately get smoother frames.
 
 ### Keybinds
 
 | Key | Action |
 |---|---|
 | `F6` | Open the config screen |
-| `F7` | Show / hide the stability HUD (hidden by default) |
-| `F8` | Toggle adaptive render distance |
+| `F7` | Show / hide the stability HUD (on by default, compact) |
+| `F8` | Toggle the render-distance governor (raise-only) |
 | `F9` | Toggle the entire mod on/off |
 
 Every keybind sends a brief in-game chat message so you know what changed.
@@ -80,10 +114,9 @@ Every keybind sends a brief in-game chat message so you know what changed.
 ```bash
 # Requires JDK 25 (Temurin 25 works).
 export JAVA_HOME=/path/to/jdk-25
-./gradlew build
+./gradlew build      # produces build/libs/stabilifps-1.1.0.jar
+./gradlew test       # runs the pure-logic regression suite
 ```
-
-The mod jar is written to `build/libs/stabilifps-1.0.0.jar`.
 
 ### Toolchain (verified)
 
@@ -103,58 +136,55 @@ The mod jar is written to `build/libs/stabilifps-1.0.0.jar`.
 
 ---
 
-## How it prevents drops (technical)
+## How it keeps frames flat (technical)
 
 ```
-                ┌─────────────────────────────────────────────┐
-   every frame  │  GameRenderer.render mixin ──► FrameTime     │
-                │                                 Tracker      │
-                │   (avg / 1% low / variance / hitches)        │
-                └───────────────┬─────────────────────────────┘
-                                │ degraded?
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
- AdaptiveRenderDistance    FpsGovernor           DistanceEntityCuller
-  RD ──► smaller            cap ──► shallower     entities ──► fewer
-  (less chunk geometry)     (shallower GPU queue) (less draw work)
-        │                       │                       │
-        └──────────► all reduce main-thread frame time ◄┘
-                                │
-                         frame time recovers
-                                │
-              adaptive systems grow RD / raise cap back up
-              (hysteresis prevents flapping)
+ every frame  GameRenderer.render mixin ──► ChunkLoadPacer.beginFrame()
+              └─────────────────────────► FrameTimeTracker.onFrame()
+                                          (avg / 1% low / variance / hitches)
+
+  chunk mesh about to upload ─► ChunkUploadMixin ──► ChunkLoadPacer.allowUpload()
+                                  (charges the per-frame µs budget; attributes
+                                   hitches to CHUNK when over budget)
+
+  GC pause fires ─► GcMonitor (JMX) ──► records duration, attributes to GC
+
+  20 Hz tick ─► RenderDistanceGovernor  (raise-only; never lowers your RD)
+             └► AllocationBudget        (defer allocating work if GC imminent)
+             └► FpsGovernor             (opt-in adaptive cap)
 ```
 
-GcMonitor runs independently via the platform JMX
-`GarbageCollectorMXBean` notification stream so GC-induced hitches are
-attributable rather than mysterious.
+All mixins use `require = 0`, so if a future 26.x drop reshapes an injection
+point, the mod no-ops that feature rather than crashing — vanilla behaviour
+wins over a crash, always.
 
 ---
 
 ## Config
 
 Lives at `.minecraft/config/stabilifps.json` (auto-created). All values are
-also editable in-game via F6. Key defaults:
+editable in-game via F6, and **Reset to recommended** restores the zero-config
+safe defaults. Key defaults:
 
 | Option | Default | Meaning |
 |---|---|---|
-| `adaptiveRenderDistance` | true | shrink/grow RD with frame budget |
-| `degradeThresholdMs` | 33.0 | frame time that triggers a shrink (~30 FPS) |
-| `recoverThresholdMs` | 20.0 | frame time that triggers a grow (~50 FPS) |
-| `hysteresisSamples` | 40 | consecutive ticks needed to transition |
-| `adaptiveCap` | true | hill-climb the framerate cap |
-| `entityCull` | true | cull far entities |
-| `entityCullDistance` | 96 | blocks |
+| `rdGovernor` | true | raise RD toward max when healthy; never lower |
+| `chunkPacer` | true | spread chunk-mesh bursts across frames |
+| `gcAwareDeferral` | true | defer allocating work before a GC |
 | `gcMonitor` | true | track GC pauses |
+| `showHud` | true | stability HUD on (compact) |
+| `adaptiveCap` | false | opt-in adaptive framerate cap |
+| `entityCull` | false | opt-in far-entity culling |
+| `maxRenderDistance` | 32 | governor ceiling (floor = your setting) |
 
 ---
 
 ## Compatibility
 
-StabiliFPS is **client-side only** and makes no gameplay changes, so it is
-safe on any server. It composes well with Sodium / Lithium / FerriteCore
-(those raise the average; StabiliFPS keeps it flat). It targets the Minecraft
+StabiliFPS is **client-side only** and never changes anything you can see
+against your will, so it is safe on any server. It composes with Sodium /
+Lithium / FerriteCore (those raise the average; StabiliFPS keeps it flat) and
+with ImmediatelyFast / ModernFix / EntityCulling. It targets the Minecraft
 26.1.x line specifically — it will not load on 1.21.x or older.
 
 ## License

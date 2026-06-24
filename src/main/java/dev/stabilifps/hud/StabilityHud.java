@@ -1,6 +1,7 @@
 package dev.stabilifps.hud;
 
 import dev.stabilifps.config.StabiliConfig;
+import dev.stabilifps.core.ChunkLoadPacer;
 import dev.stabilifps.core.FrameTimeTracker;
 import dev.stabilifps.core.GcMonitor;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
@@ -64,6 +65,12 @@ public final class StabilityHud implements HudElement {
                 (int) FrameTimeTracker.lowFpsOnePercent(),
                 (int) FrameTimeTracker.stabilityScore(),
                 GcMonitor.lastPauseMs());
+        // Append the hitch-cause tag when we know why the last stutter happened
+        // — the headline "it actually tells you" feature.
+        FrameTimeTracker.HitchCause cause = FrameTimeTracker.recentHitchCause();
+        if (cause != null) {
+            line += "  " + causeLabel(cause);
+        }
         int w = f.width(line) + 8;
         g.fill(x, y, x + w, y + f.lineHeight + 6, BG);
         g.text(f, line, x + 4, y + 3, colorForScore(FrameTimeTracker.stabilityScore()));
@@ -102,12 +109,13 @@ public final class StabilityHud implements HudElement {
                 : String.format("GC last %dms  max %dms  x%d", GcMonitor.lastPauseMs(), GcMonitor.maxPauseMs(), GcMonitor.totalPauses());
         g.text(f, gcLine, tx, ty, GcMonitor.recentHitch() ? RED : DIM); ty += lh;
 
-        // Active interventions line.
+        // Active interventions line: governor (raise-only RD) + pacer + cap.
         int rd = safeRd(mc);
         int cap = safeCap(mc);
-        String rdState = c.adaptiveRenderDistance ? "RD " + rd + (FrameTimeTracker.isDegraded() ? "down" : "") : "RD " + rd + "(off)";
+        String gov = c.rdGovernor ? "gov RD" + rd + "+" : "RD " + rd;
+        String pace = c.chunkPacer ? "pacer " + ChunkLoadPacer.modeLabel() : "pacer off";
         String capState = c.adaptiveCap ? "cap " + (cap >= 260 ? "inf" : cap) : "cap " + (cap >= 260 ? "inf" : cap) + "(off)";
-        g.text(f, rdState + "   " + capState, tx, ty, DIM); ty += lh;
+        g.text(f, gov + "  " + pace + "  " + capState, tx, ty, DIM); ty += lh;
 
         // Frame-time sparkline below the text box.
         int gy = y + boxH + 2;
@@ -140,6 +148,17 @@ public final class StabilityHud implements HudElement {
         if (score >= 80) return GREEN;
         if (score >= 50) return YELLOW;
         return RED;
+    }
+
+    /** Short tag for a hitch cause, shown in red so the player notices it. */
+    private static String causeLabel(FrameTimeTracker.HitchCause cause) {
+        return switch (cause) {
+            case CHUNK   -> "\u00A7c[chunk]";
+            case GC      -> "\u00A7c[gc]";
+            case ENTITY  -> "\u00A7c[entity]";
+            case ADAPTIVE-> "\u00A7c[rd]";
+            case UNKNOWN -> "\u00A7c[hitch]";
+        };
     }
 
     private static int safeRd(Minecraft mc) {

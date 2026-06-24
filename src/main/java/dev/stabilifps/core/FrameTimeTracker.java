@@ -29,17 +29,34 @@ public final class FrameTimeTracker {
     private static final long MS = 1_000_000L;
 
     private static long[] frames;
+    // Reusable scratch buffer for the per-frame sort, so ensureComputed() never
+    // allocates in the hot path. Only touched under ensureComputed().
+    private static long[] scratch;
     private static int head = 0;
     private static int size = 0;
     private static long lastSampleNanos = 0L;
 
-    // Cached derived values, recomputed on demand.
+    // Cached derived values, recomputed at most once per frame (when the ring
+    // head advances). Getters call ensureComputed(); if the head hasn't moved
+    // since the last compute, the cache is returned as-is — so calling avgMs(),
+    // varianceMs() and lowFpsOnePercent() in the same frame is a single
+    // recompute, not three.
     private static double cachedAvgMs = 0;
     private static double cachedVarMs = 0;
     private static double cachedLow1Ms = 0;
     private static double cachedLow01Ms = 0;
     private static int cachedHitch = 0;
     private static long cacheFrameStamp = -1;
+
+    // Hitch attribution: when a single frame is markedly worse than the recent
+    // average, the subsystem that caused it (chunk upload, GC pause, entity
+    // pass, …) can call attributeHitch() so the HUD can show "why it stuttered"
+    // instead of a bare number. The most recent non-null cause wins for a short
+    // window so the user actually has time to read it.
+    public enum HitchCause { CHUNK, GC, ENTITY, ADAPTIVE, UNKNOWN }
+    private static volatile HitchCause lastHitchCause = null;
+    private static volatile long lastHitchCauseNanos = 0L;
+    private static final long HITCH_CAUSE_TTL_NS = 2_000_000_000L; // show for ~2s
 
     // Rolling hitch detector state (independent of full recompute).
     private static final int HITCH_WINDOW = 30;
@@ -68,12 +85,38 @@ public final class FrameTimeTracker {
         if (until > ignoreUntilNanos) ignoreUntilNanos = until;
     }
 
+    /**
+     * Attribute the most recent / current hitch to a cause so the HUD can show
+     * <i>why</i> a frame dropped (chunk, gc, entity, …) instead of just that it
+     * did. Subsystems call this when they know they just did heavy work.
+     */
+    public static void attributeHitch(HitchCause cause) {
+        lastHitchCause = cause;
+        lastHitchCauseNanos = System.nanoTime();
+    }
+
+    /** True if a hitch cause was attributed recently and is still worth showing. */
+    public static boolean hasRecentHitchCause() {
+        return lastHitchCause != null
+                && (System.nanoTime() - lastHitchCauseNanos) < HITCH_CAUSE_TTL_NS;
+    }
+
+    /** The most recent hitch cause, or null if none is fresh enough to display. */
+    public static HitchCause recentHitchCause() {
+        if (!hasRecentHitchCause()) return null;
+        return lastHitchCause;
+    }
+
     public static void init() {
         int n = Math.max(60, StabiliConfig.get().frameSampleCount);
         frames = new long[n];
+        scratch = new long[n];
         head = 0;
         size = 0;
         lastSampleNanos = 0L;
+        cacheFrameStamp = -1; // force a recompute after reset
+        lastHitchCause = null;
+        lastHitchCauseNanos = 0L;
         StabiliLog.info("FrameTimeTracker: window=%d frames", n);
     }
 
@@ -131,10 +174,13 @@ public final class FrameTimeTracker {
         if (cacheFrameStamp == head) return; // already current
         cacheFrameStamp = head;
 
-        // Copy + sort the live window (small N, cheap).
-        long[] copy = new long[size];
-        for (int i = 0; i < size; i++) copy[i] = frames[i];
-        java.util.Arrays.sort(copy);
+        // Copy + sort the live window into the reusable scratch buffer
+        // (small N, cheap, and zero-allocation). We sort the copy not the ring
+        // so the time-ordered window (used by the sparkline) stays intact.
+        if (scratch == null || scratch.length < size) scratch = new long[size];
+        for (int i = 0; i < size; i++) scratch[i] = frames[i];
+        java.util.Arrays.sort(scratch, 0, size);
+        long[] copy = scratch;
 
         long sum = 0;
         for (long l : copy) sum += l;
@@ -174,20 +220,49 @@ public final class FrameTimeTracker {
     public static int hitchCount() { ensureComputed(); return cachedHitch; }
     public static int totalHitches() { return totalHitches; }
 
-    /** Composite 0..100 stability score: rewards low variance and high 1% low. */
+    /**
+     * Composite 0..100 stability score — the headline "how smooth is it" number.
+     *
+     * <p>Weighted from the four signals that actually map to perceived
+     * smoothness, in priority order:</p>
+     * <ul>
+     *   <li><b>1% low vs average ratio</b> (40%) — the core stutter signal.
+     *       Perfectly flat = 1.0; severe stutter &lt; 0.3.</li>
+     *   <li><b>Absolute variance</b> (25%) — penalises jitter even when the
+     *       1% low is okay. &gt;6ms variance is harshly penalised.</li>
+     *   <li><b>0.1% low ratio</b> (20%) — worst-case frames; catches the rare
+     *       but jarring spike that the 1% low averages away.</li>
+     *   <li><b>Frame-time headroom</b> (15%) — rewards having average frame
+     *       time well under a 60fps budget, so high-FPS smooth play scores
+     *       higher than barely-60fps play.</li>
+     * </ul>
+     * <p>GC pause frequency is surfaced separately on the HUD rather than
+     * folded in, because a clean frame-time graph with one GC blip is still
+     * "smooth" in a way the score should not fully punish.</p>
+     */
     public static double stabilityScore() {
         double avg = avgMs();
         double low1 = cachedLow1Ms;
+        double low01 = cachedLow01Ms;
         if (avg <= 0) return 100;
-        // Ratio of 1% low frame time to average frame time. 1.0 = perfectly flat,
-        // 0.1 = severe stutter. Map [0.1..1.0] -> [0..100].
-        double ratio = low1 > 0 ? avg / low1 : 1.0; // avg/low1; if low1==avg ratio=1 (flat); if low1>>avg ratio small (bad)
-        ratio = Math.max(0.1, Math.min(1.0, ratio));
-        double fromRatio = (ratio - 0.1) / 0.9 * 100.0;
-        // Penalise absolute variance too.
+
+        // 1% low ratio (0..1). low1 >= avg means flat; low1 >> avg means bad.
+        double ratio1 = low1 > 0 ? Math.min(1.0, avg / low1) : 0;
+        double from1Low = ratio1 * 100.0;
+
+        // 0.1% low ratio — worst-case frames.
+        double ratio01 = low01 > 0 ? Math.min(1.0, avg / low01) : 0;
+        double from01Low = ratio01 * 100.0;
+
+        // Variance: 0ms = 100, 6ms+ = 0.
         double var = cachedVarMs;
-        double fromVar = Math.max(0, 100.0 - var * 6.0);
-        return Math.max(0, Math.min(100, 0.7 * fromRatio + 0.3 * fromVar));
+        double fromVar = Math.max(0, 100.0 - var * 16.0);
+
+        // Headroom: avg at 16.7ms (60fps) = ~50; at 8ms = 100; at 33ms = 0.
+        double fromHeadroom = Math.max(0, Math.min(100, (33.0 - avg) / (33.0 - 8.0) * 100.0));
+
+        return Math.max(0, Math.min(100,
+                0.40 * from1Low + 0.25 * fromVar + 0.20 * from01Low + 0.15 * fromHeadroom));
     }
 
     /** True when the recent window is in a degraded (stuttering) state. */

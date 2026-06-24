@@ -2,10 +2,12 @@ package dev.stabilifps;
 
 import dev.stabilifps.config.StabiliConfig;
 import dev.stabilifps.config.ConfigScreen;
-import dev.stabilifps.core.AdaptiveRenderDistance;
+import dev.stabilifps.core.AllocationBudget;
+import dev.stabilifps.core.ChunkLoadPacer;
 import dev.stabilifps.core.FpsGovernor;
 import dev.stabilifps.core.FrameTimeTracker;
 import dev.stabilifps.core.GcMonitor;
+import dev.stabilifps.core.RenderDistanceGovernor;
 import dev.stabilifps.hud.StabilityHud;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -25,22 +27,36 @@ import org.slf4j.LoggerFactory;
  * stability</b>: preventing the sudden 100 -> 8 -> 100 FPS stutter that
  * plagues Minecraft Java on a wide range of hardware. Rather than chasing a
  * higher average FPS (which Sodium and friends already do well), StabiliFPS
- * chases a <i>flat</i> frame-time graph by:</p>
+ * chases a <i>flat</i> frame-time graph.</p>
+ *
+ * <h2>Design philosophy: measure honestly, intervene surgically</h2>
+ * <p>Every feature is either <b>pure-good</b> (measures/paces and cannot
+ * degrade gameplay) or <b>opt-in</b> (changes something the player can see).
+ * The one gameplay-affecting system that ships ON by default — the
+ * {@link RenderDistanceGovernor} — is strictly additive: it only ever
+ * <i>raises</i> render distance when the GPU is comfortable, and never lowers
+ * it below what the player chose. The player's render distance is a hard
+ * floor. This makes the old "chunk flash" feedback loop structurally
+ * impossible.</p>
  *
  * <ul>
- *   <li>measuring the real frame-time distribution (avg, 1% low, 0.1% low,
- *       hitch count, variance);</li>
- *   <li>proactively reducing render load the moment frame time degrades
- *       (adaptive render distance + adaptive framerate cap);</li>
- *   <li>culling far / tiny entities so dense scenes do not spike the renderer;</li>
- *   <li>tracking garbage-collection pauses so GC-induced hitches are visible
- *       and can be tuned away with the recommended JVM flags.</li>
+ *   <li>{@link FrameTimeTracker} — the honest core: 1% low, 0.1% low,
+ *       variance, hitch count, a documented stability score, and hitch
+ *       attribution (chunk / gc / entity / unknown).</li>
+ *   <li>{@link RenderDistanceGovernor} — raises RD toward max when healthy;
+ *       never lowers it.</li>
+ *   <li>{@link ChunkLoadPacer} — spreads chunk-mesh bursts across frames so
+ *       loading fresh terrain doesn't dominate the frame budget (the #1 cause
+ *       of Minecraft stutter).</li>
+ *   <li>{@link AllocationBudget} — defers non-critical allocating work when a
+ *       GC pause is imminent.</li>
+ *   <li>{@link GcMonitor} — tracks real GC pauses and surfaces them.</li>
+ *   <li>{@link FpsGovernor} — optional adaptive cap; off by default.</li>
  * </ul>
  *
  * <p>All heavy logic lives in the {@code core} package and is driven from here
  * via stable Fabric API events ({@link ClientTickEvents} and the 26.1
- * {@link HudElementRegistry}), which keeps the mod resilient to Minecraft
- * internal refactors across the 26.x line.</p>
+ * {@link HudElementRegistry}).</p>
  */
 public class StabiliFPS implements ClientModInitializer {
     public static final String MOD_ID = "stabilifps";
@@ -50,22 +66,27 @@ public class StabiliFPS implements ClientModInitializer {
     public static KeyMapping CONFIG_KEY;
     /** Toggle the stability HUD overlay. */
     public static KeyMapping HUD_KEY;
-    /** Manually force adaptive render distance on/off. */
-    public static KeyMapping TOGGLE_ADAPTIVE_KEY;
+    /** Toggle the render-distance governor (raise-only; never lowers RD). */
+    public static KeyMapping TOGGLE_GOVERNOR_KEY;
     /** Toggle the entire mod on/off (master kill-switch). */
     public static KeyMapping TOGGLE_MOD_KEY;
 
+    /** Tracks world transitions so the chunk pacer can boost during loads. */
+    private static boolean wasInWorld = false;
+
     @Override
     public void onInitializeClient() {
-        LOGGER.info("StabiliFPS: initialising frame-time stabiliser for Minecraft 26.1+");
+        LOGGER.info("StabiliFPS v1.1: surgical frame-time stabiliser for Minecraft 26.1+");
 
         // 1. Load config first — every subsystem reads it.
         StabiliConfig.load();
 
-        // 2. Wire up subsystems.
+        // 2. Wire up subsystems. Order matters only in that FrameTimeTracker
+        //    must be ready before anything that consults it.
         FrameTimeTracker.init();
+        AllocationBudget.init();
         GcMonitor.start();
-        AdaptiveRenderDistance.init();
+        RenderDistanceGovernor.init();
         FpsGovernor.init();
 
         // 3. Register keybinds. 26.1 KeyMapping takes a KeyMapping.Category
@@ -74,8 +95,8 @@ public class StabiliFPS implements ClientModInitializer {
                 new KeyMapping("key.stabilifps.config", GLFW.GLFW_KEY_F6, KeyMapping.Category.MISC));
         HUD_KEY = KeyMappingHelper.registerKeyMapping(
                 new KeyMapping("key.stabilifps.hud", GLFW.GLFW_KEY_F7, KeyMapping.Category.MISC));
-        TOGGLE_ADAPTIVE_KEY = KeyMappingHelper.registerKeyMapping(
-                new KeyMapping("key.stabilifps.toggle_adaptive", GLFW.GLFW_KEY_F8, KeyMapping.Category.MISC));
+        TOGGLE_GOVERNOR_KEY = KeyMappingHelper.registerKeyMapping(
+                new KeyMapping("key.stabilifps.toggle_governor", GLFW.GLFW_KEY_F8, KeyMapping.Category.MISC));
         TOGGLE_MOD_KEY = KeyMappingHelper.registerKeyMapping(
                 new KeyMapping("key.stabilifps.toggle_mod", GLFW.GLFW_KEY_F9, KeyMapping.Category.MISC));
 
@@ -85,10 +106,10 @@ public class StabiliFPS implements ClientModInitializer {
                 Identifier.fromNamespaceAndPath(MOD_ID, "stability_hud"),
                 new StabilityHud());
 
-        // 5. Per-tick (20 Hz) logic: adaptive decisions, GC sampling, keybind polling.
+        // 5. Per-tick (20 Hz) logic: subsystem decisions, GC sampling, keybind polling.
         ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
 
-        LOGGER.info("StabiliFPS ready. F6=config  F7=HUD  F8=adaptive RD  F9=toggle mod");
+        LOGGER.info("StabiliFPS ready. F6=config  F7=HUD  F8=RD governor  F9=toggle mod");
     }
 
     private void onClientTick(Minecraft mc) {
@@ -102,12 +123,12 @@ public class StabiliFPS implements ClientModInitializer {
             StabiliConfig.save();
             feedback(mc, c.showHud ? "\u00A7a[StabiliFPS] HUD shown" : "\u00A7e[StabiliFPS] HUD hidden");
         }
-        while (TOGGLE_ADAPTIVE_KEY.consumeClick()) {
+        while (TOGGLE_GOVERNOR_KEY.consumeClick()) {
             StabiliConfig c = StabiliConfig.get();
-            c.adaptiveRenderDistance = !c.adaptiveRenderDistance;
+            c.rdGovernor = !c.rdGovernor;
             StabiliConfig.save();
-            AdaptiveRenderDistance.onToggled();
-            feedback(mc, "\u00A7a[StabiliFPS] Adaptive RD: " + (c.adaptiveRenderDistance ? "ON" : "OFF"));
+            RenderDistanceGovernor.onToggled();
+            feedback(mc, "\u00A7a[StabiliFPS] RD governor: " + (c.rdGovernor ? "ON (raise-only)" : "OFF"));
         }
         while (TOGGLE_MOD_KEY.consumeClick()) {
             StabiliConfig c = StabiliConfig.get();
@@ -121,8 +142,24 @@ public class StabiliFPS implements ClientModInitializer {
 
         // Drive subsystems.
         GcMonitor.tick();
-        AdaptiveRenderDistance.tick(mc);
+        RenderDistanceGovernor.tick(mc);
         FpsGovernor.tick(mc);
+        trackWorldLoad(mc);
+    }
+
+    /**
+     * Tell the chunk pacer when the player joins/leaves a world so it can
+     * full-throttle the initial load (a few hitches while the world appears is
+     * worth it) and then settle back to adaptive pacing.
+     */
+    private static void trackWorldLoad(Minecraft mc) {
+        boolean inWorld = mc.level != null && mc.player != null;
+        if (inWorld && !wasInWorld) {
+            ChunkLoadPacer.notifyWorldLoad();
+        } else if (!inWorld && wasInWorld) {
+            ChunkLoadPacer.notifyWorldLoadDone();
+        }
+        wasInWorld = inWorld;
     }
 
     /** Send a local-only chat message so the player gets feedback for keybinds. */

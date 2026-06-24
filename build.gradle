@@ -40,6 +40,16 @@ dependencies {
     // by plain `implementation`/`api`/`compileOnly`.
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // Test-only: JUnit 5. Pure-logic subsystems (FrameTimeTracker stats, pacer
+    // budget maths) are tested without spinning up a Minecraft client — the kind
+    // of regression coverage that would have caught the original chunk-flash bug.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 processResources {

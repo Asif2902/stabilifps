@@ -92,6 +92,8 @@ public final class GcMonitor {
         if (pauseSize < PAUSE_WINDOW) pauseSize++;
 
         if (durationMs >= StabiliConfig.get().gcPauseWarnMs) {
+            // Attribute the hitch to GC so the HUD can say WHY the frame dropped.
+            FrameTimeTracker.attributeHitch(FrameTimeTracker.HitchCause.GC);
             StabiliLog.warn("GcMonitor: long GC pause %.0fms (%s) — consider adding Aikar's flags",
                     (double) durationMs, action);
         }
