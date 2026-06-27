@@ -166,8 +166,8 @@ public class StabiliFPS implements ClientModInitializer {
     /** Send a local-only chat message so the player gets feedback for keybinds. */
     private static void feedback(Minecraft mc, String text) {
         try {
-            if (mc.gui != null && mc.gui.getChat() != null) {
-                mc.gui.getChat().addClientSystemMessage(
+            if (mc.gui != null && mc.gui.hud != null && mc.gui.hud.getChat() != null) {
+                mc.gui.hud.getChat().addClientSystemMessage(
                         net.minecraft.network.chat.Component.literal(text));
             }
         } catch (Throwable ignored) {}

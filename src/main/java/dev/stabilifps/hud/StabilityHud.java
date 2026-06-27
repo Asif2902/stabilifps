@@ -50,7 +50,7 @@ public final class StabilityHud implements HudElement {
         if (!c.enabled || !c.showHud) return;
 
         Minecraft mc = Minecraft.getInstance();
-        if (mc.options.hideGui) return;
+        if (mc.gui.hud.isHidden()) return;
 
         int x = 4;
         int y = 4;
