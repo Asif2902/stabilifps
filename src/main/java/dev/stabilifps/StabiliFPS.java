@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * </ul>
  *
  * <p>All heavy logic lives in the {@code core} package and is driven from here
- * via stable Fabric API events ({@link ClientTickEvents} and the 26.1
+ * via stable Fabric API events ({@link ClientTickEvents} and the 26.x
  * {@link HudElementRegistry}).</p>
  */
 public class StabiliFPS implements ClientModInitializer {
@@ -76,7 +76,7 @@ public class StabiliFPS implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        LOGGER.info("StabiliFPS v1.1: surgical frame-time stabiliser for Minecraft 26.1+");
+        LOGGER.info("StabiliFPS v1.2: surgical frame-time stabiliser for Minecraft 26.2+");
 
         // 1. Load config first — every subsystem reads it.
         StabiliConfig.load();
@@ -89,7 +89,7 @@ public class StabiliFPS implements ClientModInitializer {
         RenderDistanceGovernor.init();
         FpsGovernor.init();
 
-        // 3. Register keybinds. 26.1 KeyMapping takes a KeyMapping.Category
+        // 3. Register keybinds. 26.x KeyMapping takes a KeyMapping.Category
         //    (a record) instead of a plain string category; we use MISC.
         CONFIG_KEY = KeyMappingHelper.registerKeyMapping(
                 new KeyMapping("key.stabilifps.config", GLFW.GLFW_KEY_F6, KeyMapping.Category.MISC));
@@ -100,7 +100,7 @@ public class StabiliFPS implements ClientModInitializer {
         TOGGLE_MOD_KEY = KeyMappingHelper.registerKeyMapping(
                 new KeyMapping("key.stabilifps.toggle_mod", GLFW.GLFW_KEY_F9, KeyMapping.Category.MISC));
 
-        // 4. Register the stability HUD as a 26.1 HudElement (rendered last so
+        // 4. Register the stability HUD as a 26.x HudElement (rendered last so
         //    it sits on top of the vanilla HUD).
         HudElementRegistry.addLast(
                 Identifier.fromNamespaceAndPath(MOD_ID, "stability_hud"),
@@ -115,7 +115,8 @@ public class StabiliFPS implements ClientModInitializer {
     private void onClientTick(Minecraft mc) {
         // Poll keybinds.
         while (CONFIG_KEY.consumeClick()) {
-            mc.setScreen(new ConfigScreen(null));
+            // 26.2 moved screen setters off Minecraft into the Gui component.
+            mc.gui.setScreen(new ConfigScreen(null));
         }
         while (HUD_KEY.consumeClick()) {
             StabiliConfig c = StabiliConfig.get();

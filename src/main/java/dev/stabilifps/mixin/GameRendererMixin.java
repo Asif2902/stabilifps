@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Per-frame sampling + chunk-pacer begin hook.
  *
- * <p>26.1 reshaped {@code GameRenderer.render} to {@code render(DeltaTracker, boolean)}.
+ * <p>26.x reshaped {@code GameRenderer.render} to {@code render(DeltaTracker, boolean)}.
  * It is still called exactly once per rendered frame, so it remains the most
  * reliable place to (a) sample frame boundaries — including when the HUD is
  * hidden (F1), where the HUD {@code HudElement} fallback does not fire — and

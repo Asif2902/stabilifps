@@ -87,7 +87,7 @@ Every feature is independently toggleable (F6). All Mixins use require=0
 Entity Culling, ModernFix, ImmediatelyFast.
 
 ## Requirements
-- Minecraft 26.1.2+
+- Minecraft 26.2+
 - Fabric Loader 0.19+
 - Fabric API
 - Java 25
@@ -107,7 +107,7 @@ F6 = config | F7 = toggle HUD | F8 = toggle adaptive RD | F9 = toggle mod
   will get you debunked
 - ❌ "Eliminates all lag" — GC pauses can't be fixed by a client mod
 - ❌ "Better than Sodium" — you're complementary, not a replacement
-- ❌ "Works on all versions" — you only support 26.1+
+- ❌ "Works on all versions" — you only support 26.2+
 
 ### What TO claim
 
@@ -127,7 +127,7 @@ F6 = config | F7 = toggle HUD | F8 = toggle adaptive RD | F9 = toggle mod
    - **Project type**: Mod
    - **Categories**: Optimization, Utility
    - **Loaders**: Fabric
-   - **Game versions**: 26.1, 26.1.1, 26.1.2
+   - **Game versions**: 26.2
 4. Upload your real benchmark screenshots as gallery images
 5. Use the description template above
 

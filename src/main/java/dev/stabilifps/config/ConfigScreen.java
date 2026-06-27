@@ -26,7 +26,7 @@ import java.util.function.Supplier;
  * offset, and the title bar + Done button are pinned outside the scroll region
  * so they never move or overlap content.</p>
  *
- * <p>26.1 renders screens via {@code extractRenderState(GuiGraphicsExtractor, ...)}
+ * <p>26.x renders screens via {@code extractRenderState(GuiGraphicsExtractor, ...)}
  * rather than the old {@code render(GuiGraphics, ...)}; drawing goes through
  * the extractor's {@code fill/centeredText} helpers.</p>
  */

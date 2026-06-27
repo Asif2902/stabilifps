@@ -12,7 +12,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 /**
- * On-screen stability overlay, implemented as a 26.1 {@link HudElement}.
+ * On-screen stability overlay, implemented as a 26.x {@link HudElement}.
  *
  * <p>Renders every frame and shows the numbers that actually matter for
  * stutter, plus a live frame-time sparkline so drops are visible as red spikes
@@ -28,7 +28,7 @@ import net.minecraft.network.chat.Component;
  *  (frame-time sparkline)
  * </pre>
  *
- * <p>26.1 drew immediate-mode graphics via {@link GuiGraphicsExtractor} (the old
+ * <p>26.x draws immediate-mode graphics via {@link GuiGraphicsExtractor} (the old
  * {@code GuiGraphics.fill/drawString} helpers moved here as {@code fill/text}).
  * This element is registered last so it paints over the vanilla HUD.</p>
  */

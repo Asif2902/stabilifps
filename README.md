@@ -1,6 +1,6 @@
 # StabiliFPS
 
-**A frame-time stabiliser mod for Minecraft Java Edition 26.1+ (Fabric).**
+**A frame-time stabiliser mod for Minecraft Java Edition 26.2+ (Fabric).**
 
 > **Sodium raises your ceiling. StabiliFPS raises your floor.**
 
@@ -10,8 +10,8 @@ its single goal is to prevent the sudden `100 -> 8 -> 100` FPS stutter that
 plagues Minecraft on a wide range of hardware, and to keep the framerate
 stabilised for as long as possible.
 
-> Built and verified against **Minecraft 26.1.2** with **Fabric Loader 0.19.3**,
-> **Fabric API 0.152.1+26.1.2**, **Fabric Loom 1.17.12**, **Gradle 9.6.0** and
+> Built and verified against **Minecraft 26.2** with **Fabric Loader 0.19.3**,
+> **Fabric API 0.153.0+26.2**, **Fabric Loom 1.17.12**, **Gradle 9.6.0** and
 > **JDK 25**.
 
 ---
@@ -82,15 +82,15 @@ Everything is visible on a live HUD that tells you **why** each frame dropped
 
 ## Install (player)
 
-1. Install the **Fabric Loader** 0.19+ for Minecraft **26.1.x** (use the
+1. Install the **Fabric Loader** 0.19+ for Minecraft **26.2.x** (use the
    [Fabric installer](https://fabricmc.net/use/installer/)).
-2. Download **Fabric API** for 26.1.2 from
+2. Download **Fabric API** for 26.2 from
    [Modrinth](https://modrinth.com/mod/fabric-api/versions) and drop it in
    `.minecraft/mods`.
-3. Drop `stabilifps-1.1.0.jar` into `.minecraft/mods`.
+3. Drop `stabilifps-1.2.0.jar` into `.minecraft/mods`.
 4. Launch Minecraft with the Fabric profile.
 
-**Requirements:** Minecraft 26.1.2 · Java 25 · Fabric Loader 0.19+ · Fabric API.
+**Requirements:** Minecraft 26.2 · Java 25 · Fabric Loader 0.19+ · Fabric API.
 
 Out of the box the mod is **zero-config safe**: the HUD and GC monitor are on,
 the RD governor is on (raise-only), the chunk pacer is on, and the cap / entity
@@ -114,7 +114,7 @@ Every keybind sends a brief in-game chat message so you know what changed.
 ```bash
 # Requires JDK 25 (Temurin 25 works).
 export JAVA_HOME=/path/to/jdk-25
-./gradlew build      # produces build/libs/stabilifps-1.1.0.jar
+./gradlew build      # produces build/libs/stabilifps-1.2.0.jar
 ./gradlew test       # runs the pure-logic regression suite
 ```
 
@@ -122,14 +122,14 @@ export JAVA_HOME=/path/to/jdk-25
 
 | Component | Version |
 |---|---|
-| Minecraft | 26.1.2 |
+| Minecraft | 26.2 |
 | Fabric Loader | 0.19.3 |
-| Fabric API | 0.152.1+26.1.2 |
+| Fabric API | 0.153.0+26.2 |
 | Fabric Loom | 1.17.12 |
 | Gradle | 9.6.0 |
 | Java | 25 |
 
-> 26.1 is the **first non-obfuscated** Minecraft release, so the build uses
+> 26.1 was the **first non-obfuscated** Minecraft release (26.2 continues the line), so the build uses
 > Mojang official mappings directly (no Yarn), plain `implementation` deps
 > (no `modImplementation`), and the plain `jar` task (no `remapJar`). See the
 > [Fabric "Porting to 26.1" guide](https://docs.fabricmc.net/develop/porting).
@@ -185,7 +185,7 @@ StabiliFPS is **client-side only** and never changes anything you can see
 against your will, so it is safe on any server. It composes with Sodium /
 Lithium / FerriteCore (those raise the average; StabiliFPS keeps it flat) and
 with ImmediatelyFast / ModernFix / EntityCulling. It targets the Minecraft
-26.1.x line specifically — it will not load on 1.21.x or older.
+26.2 line — it will not load on 1.21.x or older.
 
 ## License
 
