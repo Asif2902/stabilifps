@@ -77,7 +77,7 @@ public class StabiliFPS implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        LOGGER.info("StabiliFPS v1.3: Sodium sub-pack — frame-time stability companion");
+        LOGGER.info("StabiliFPS v1.3.1: Sodium sub-pack — frame-time stability companion (bug fixes)");
 
         // 1. Detect companions (Sodium etc.) first so the rest of the mod can be a good sub-pack.
         ModCompat.detect();
