@@ -71,17 +71,19 @@ public final class FpsGovernor {
             return;
         }
 
-        // Detect the user changing the cap manually and adopt it as a baseline.
+        // Detect the user changing the cap manually (in video settings or elsewhere) and adopt it.
+        // Use a longer freeze so the governor doesn't immediately fight the user's choice.
         if (lastApplied >= 0 && current != lastApplied) {
             lastApplied = current;
-            // User-driven change; let it settle before we measure again.
-            FrameTimeTracker.ignoreFor(CHANGE_FREEZE_MS);
+            FrameTimeTracker.ignoreFor(30000); // 30 seconds longer respect for manual changes
             lastChangeNanos = System.nanoTime();
+            StabiliLog.info("FpsGovernor: manual cap change detected to %d, backing off auto-adjust for a while", current);
         }
 
         // Skip evaluation while a recent change is still settling.
         long nowMs = System.currentTimeMillis();
-        if (lastChangeNanos > 0 && nowMs - (lastChangeNanos / 1_000_000L) < CHANGE_FREEZE_MS) return;
+        long manualFreeze = 30000;
+        if (lastChangeNanos > 0 && nowMs - (lastChangeNanos / 1_000_000L) < manualFreeze) return;
 
         double avg = FrameTimeTracker.avgMs();
         double low1Ms = avgMsToLow1();
@@ -104,12 +106,14 @@ public final class FpsGovernor {
 
         if (stuttery && current > floor) {
             desired = Math.max(floor, current - STEP);
-            StabiliLog.info("Governor: stuttery (var=%.1fms low1=%dfps) -> cap %d -> %d",
+            StabiliLog.info("Governor: stuttery (var=%.1fms low1=%dfps) -> lowered cap %d -> %d (for stability)",
                     variance, low1Fps, current, desired);
-        } else if (!stuttery && low1Fps > 0 && low1Fps >= currentFps * 0.92 && current < ceiling) {
-            // Smooth and the 1% low is essentially at the cap => we have headroom.
+        } else if (!stuttery && low1Fps > 0 && low1Fps >= currentFps * 0.97 && variance < 2.5 && current < ceiling) {
+            // Much stricter raise condition to avoid random flipping.
+            // Only raise if 1% low is *very* close to the cap AND variance is excellent.
+            // This prevents the cap from jumping around between video settings and mod config.
             desired = Math.min(ceiling, current + STEP);
-            StabiliLog.info("Governor: smooth (var=%.1fms low1=%dfps) -> cap %d -> %d",
+            StabiliLog.info("Governor: very smooth (var=%.1fms low1=%dfps) -> raised cap %d -> %d",
                     variance, low1Fps, current, desired);
         }
 

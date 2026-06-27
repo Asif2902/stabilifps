@@ -85,6 +85,10 @@ public final class StabiliConfig {
     /**
      * Adjust the framerate cap to maximise 1% low. OFF by default because it
      * changes a setting the player chose; opt in only if desired.
+     *
+     * WARNING: Can feel "random" as it steps the cap up/down. The governor now
+     * tries hard to respect manual changes from video settings, but results vary.
+     * Use with caution. Many players prefer to leave this OFF and set a fixed cap.
      */
     public boolean adaptiveCap = false;
     /** Hard floor for the cap (never cap below this). */
@@ -93,8 +97,8 @@ public final class StabiliConfig {
     public int maxCap = 0;
     /** How aggressively to react to variance (0.0..1.0). */
     public double governorAggression = 0.5;
-    /** Seconds between cap re-evaluations. */
-    public int capReevaluateIntervalSec = 10;
+    /** Seconds between cap re-evaluations. Higher = less random switching. */
+    public int capReevaluateIntervalSec = 15;
 
     // ── Entity culling — OFF by default ─────────────────────────────────────
     /**

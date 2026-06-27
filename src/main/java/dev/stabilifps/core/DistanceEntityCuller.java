@@ -2,6 +2,7 @@ package dev.stabilifps.core;
 
 import dev.stabilifps.config.StabiliConfig;
 import dev.stabilifps.util.ModCompat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 
@@ -37,8 +38,14 @@ public final class DistanceEntityCuller {
             if (distanceSq < (c.smallEntityCullDistance * 1.5) * (c.smallEntityCullDistance * 1.5)) return false;
         }
 
-        // Never cull self or vehicles/passengers the player is using.
-        if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) return false;
+        // Never cull the player or anything the player is riding / riding the player.
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.player != null) {
+            if (entity == mc.player) return false;
+            if (entity.hasExactlyOnePlayerPassenger() || entity.isPassengerOfSameVehicle(mc.player)) {
+                return false;
+            }
+        }
 
         double maxDim = largestDimension(entity.getBoundingBox());
         boolean small = maxDim < 0.5;

@@ -36,18 +36,23 @@ public abstract class ClientLevelMixin {
             double px = player.getX();
             double py = player.getY();
             double pz = player.getZ();
-            List<Entity> kept = null;
-            int removed = 0;
+
+            // Correct filtering: always build the kept list of non-culled entities.
+            // Only replace the return value if we actually removed something.
+            // This prevents dropping entities that appear before the first culled one in the list.
+            List<Entity> kept = new ArrayList<>();
+            boolean culledAny = false;
+
             for (Entity e : original) {
                 double dsq = e.distanceToSqr(px, py, pz);
                 if (DistanceEntityCuller.shouldCull(e, dsq)) {
-                    if (kept == null) kept = new ArrayList<>();
-                    removed++;
+                    culledAny = true;
                 } else {
-                    if (kept != null) kept.add(e);
+                    kept.add(e);
                 }
             }
-            if (kept != null) {
+
+            if (culledAny) {
                 cir.setReturnValue(kept);
             }
         } catch (Throwable t) {
