@@ -2,6 +2,8 @@
 
 **A frame-time stabiliser mod for Minecraft Java Edition 26.2+ (Fabric).**
 
+> **Latest release: v1.3.2** — Fixed icon display, entity invisibility, and FPS cap stability. See GitHub releases for downloads.
+
 > **Sodium raises your ceiling. StabiliFPS raises your floor.**
 
 StabiliFPS does not try to raise your *average* FPS — Sodium, Lithium and
