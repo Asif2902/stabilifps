@@ -1,6 +1,7 @@
 package dev.stabilifps.core;
 
 import dev.stabilifps.config.StabiliConfig;
+import dev.stabilifps.util.ModCompat;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 
@@ -26,6 +27,15 @@ public final class DistanceEntityCuller {
     public static boolean shouldCull(Entity entity, double distanceSq) {
         StabiliConfig c = StabiliConfig.get();
         if (!c.enabled || !c.entityCull) return false;
+
+        // Be a good citizen: if a dedicated Entity Culling mod is present,
+        // our simple distance culler can stay out of the way by default.
+        // User can still force it on via config if they want both.
+        if (ModCompat.shouldPreferExternalEntityCulling()) {
+            // Only cull very aggressively far small entities even then,
+            // to avoid fighting the other mod.
+            if (distanceSq < (c.smallEntityCullDistance * 1.5) * (c.smallEntityCullDistance * 1.5)) return false;
+        }
 
         // Never cull self or vehicles/passengers the player is using.
         if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) return false;

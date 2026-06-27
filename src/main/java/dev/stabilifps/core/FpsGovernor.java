@@ -1,6 +1,7 @@
 package dev.stabilifps.core;
 
 import dev.stabilifps.config.StabiliConfig;
+import dev.stabilifps.util.ModCompat;
 import dev.stabilifps.util.StabiliLog;
 import net.minecraft.client.Minecraft;
 
@@ -91,7 +92,10 @@ public final class FpsGovernor {
         int low1Fps = low1Ms > 0 ? (int) Math.round(1000.0 / low1Ms) : 0;
 
         // Aggression scales how much variance we tolerate before stepping down.
-        double varTolerance = 6.0 * (1.0 - c.governorAggression); // ms; lower aggression => tolerate more variance
+        // In boosted Sodium environments we tolerate a little more variance
+        // because the base frame times are already much better.
+        double varTolerance = 6.0 * (1.0 - c.governorAggression);
+        if (ModCompat.isBoostedEnvironment()) varTolerance *= 1.25;
         boolean stuttery = variance > varTolerance && low1Fps > 0 && low1Fps < (int)(1000.0 / avg * 0.6);
 
         int desired = current;

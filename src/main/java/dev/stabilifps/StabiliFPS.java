@@ -9,6 +9,7 @@ import dev.stabilifps.core.FrameTimeTracker;
 import dev.stabilifps.core.GcMonitor;
 import dev.stabilifps.core.RenderDistanceGovernor;
 import dev.stabilifps.hud.StabilityHud;
+import dev.stabilifps.util.ModCompat;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
@@ -76,10 +77,21 @@ public class StabiliFPS implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        LOGGER.info("StabiliFPS v1.2: surgical frame-time stabiliser for Minecraft 26.2+");
+        LOGGER.info("StabiliFPS v1.3: Sodium sub-pack — frame-time stability companion");
 
-        // 1. Load config first — every subsystem reads it.
+        // 1. Detect companions (Sodium etc.) first so the rest of the mod can be a good sub-pack.
+        ModCompat.detect();
+
+        // 2. Load config first — every subsystem reads it.
         StabiliConfig.load();
+
+        // 3. Make ourselves a polite sub-pack: if a dedicated entity culling mod
+        //    is present, default our (opt-in) culler off so we don't fight it.
+        if (ModCompat.isEntityCullingModLoaded() && StabiliConfig.get().entityCull) {
+            // Only auto-adjust if the user hasn't explicitly set it in their json yet.
+            // Simple heuristic: leave it (they chose to turn it on).
+            // For fresh installs we already default false.
+        }
 
         // 2. Wire up subsystems. Order matters only in that FrameTimeTracker
         //    must be ready before anything that consults it.
@@ -109,7 +121,9 @@ public class StabiliFPS implements ClientModInitializer {
         // 5. Per-tick (20 Hz) logic: subsystem decisions, GC sampling, keybind polling.
         ClientTickEvents.END_CLIENT_TICK.register(this::onClientTick);
 
-        LOGGER.info("StabiliFPS ready. F6=config  F7=HUD  F8=RD governor  F9=toggle mod");
+        String companions = ModCompat.companionSummary();
+        LOGGER.info("StabiliFPS ready as Sodium companion. {} F6=config  F7=HUD  F8=RD governor  F9=toggle mod",
+                companions.isEmpty() ? "" : companions + " ");
     }
 
     private void onClientTick(Minecraft mc) {

@@ -3,7 +3,7 @@
   "id": "stabilifps",
   "version": "${version}",
   "name": "StabiliFPS",
-  "description": "Sodium raises your ceiling, StabiliFPS raises your floor. A client-side Fabric mod focused purely on frame-time STABILITY — not average FPS. It kills the sudden 100 -> 8 -> 100 stutter by pacing chunk-mesh bursts across frames, deferring allocating work before GC pauses, and measuring the metrics that actually matter (1% low, 0.1% low, variance) on a live HUD that tells you WHY each frame dropped (chunk / gc / entity). Designed to never compromise gameplay: the render-distance governor only ever RAISES render distance (never lowers yours), and every gameplay-affecting feature is off by default or strictly additive. Composes with every other perf mod; every feature is independently toggleable. Zero-config safe out of the box.",
+  "description": "Sodium's best companion. Sodium (and other perf mods) raise your ceiling — StabiliFPS raises your floor and keeps the high FPS stable. Pure frame-time stability (1% lows, variance, hitch attribution) with zero compromise to gameplay. Chunk pacer, GC-aware deferral, raise-only RD governor. Works alongside Sodium, Lithium, FerriteCore, EntityCulling, etc. Every feature toggleable. Zero-config safe sub-pack.",
   "authors": [
     "StabiliFPS"
   ],

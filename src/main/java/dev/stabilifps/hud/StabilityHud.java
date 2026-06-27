@@ -4,6 +4,7 @@ import dev.stabilifps.config.StabiliConfig;
 import dev.stabilifps.core.ChunkLoadPacer;
 import dev.stabilifps.core.FrameTimeTracker;
 import dev.stabilifps.core.GcMonitor;
+import dev.stabilifps.util.ModCompat;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -70,6 +71,9 @@ public final class StabilityHud implements HudElement {
         FrameTimeTracker.HitchCause cause = FrameTimeTracker.recentHitchCause();
         if (cause != null) {
             line += "  " + causeLabel(cause);
+        } else if (c.chunkPacer) {
+            double u = ChunkLoadPacer.budgetUtilization();
+            if (u > 0.85) line += String.format("  p%.0f%%", u * 100);
         }
         int w = f.width(line) + 8;
         g.fill(x, y, x + w, y + f.lineHeight + 6, BG);
@@ -113,9 +117,21 @@ public final class StabilityHud implements HudElement {
         int rd = safeRd(mc);
         int cap = safeCap(mc);
         String gov = c.rdGovernor ? "gov RD" + rd + "+" : "RD " + rd;
-        String pace = c.chunkPacer ? "pacer " + ChunkLoadPacer.modeLabel() : "pacer off";
+        String pace;
+        if (c.chunkPacer) {
+            double util = ChunkLoadPacer.budgetUtilization();
+            String utilStr = (util > 1.0) ? String.format(" %.0f%%!", util * 100) : String.format(" %.0f%%", util * 100);
+            pace = "pacer " + ChunkLoadPacer.modeLabel() + utilStr;
+        } else {
+            pace = "pacer off";
+        }
         String capState = c.adaptiveCap ? "cap " + (cap >= 260 ? "inf" : cap) : "cap " + (cap >= 260 ? "inf" : cap) + "(off)";
-        g.text(f, gov + "  " + pace + "  " + capState, tx, ty, DIM); ty += lh;
+        String line = gov + "  " + pace + "  " + capState;
+        String comp = ModCompat.companionSummary();
+        if (!comp.isEmpty()) {
+            line += "  " + comp;
+        }
+        g.text(f, line, tx, ty, DIM); ty += lh;
 
         // Frame-time sparkline below the text box.
         int gy = y + boxH + 2;

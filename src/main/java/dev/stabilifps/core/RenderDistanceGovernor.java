@@ -2,6 +2,7 @@ package dev.stabilifps.core;
 
 import dev.stabilifps.StabiliFPS;
 import dev.stabilifps.config.StabiliConfig;
+import dev.stabilifps.util.ModCompat;
 import dev.stabilifps.util.StabiliLog;
 import net.minecraft.client.Minecraft;
 
@@ -119,10 +120,16 @@ public final class RenderDistanceGovernor {
 
         // Only consider raising after a long, healthy streak, past cooldown,
         // and only up to the configured ceiling. We never lower.
+        // In a Sodium-boosted environment we can be a touch more willing to
+        // enjoy the extra headroom Sodium gave us (still raise-only).
         long now = System.nanoTime();
         boolean cooldownClear = lastRaiseNanos == 0L
                 || (now - lastRaiseNanos) / 1_000_000L >= RAISE_COOLDOWN_MS;
-        if (stableStreak >= c.hysteresisSamples
+        int effectiveHysteresis = c.hysteresisSamples;
+        if (ModCompat.isBoostedEnvironment()) {
+            effectiveHysteresis = Math.max(60, c.hysteresisSamples / 2);
+        }
+        if (stableStreak >= effectiveHysteresis
                 && cooldownClear
                 && current < c.maxRenderDistance) {
             int desired = Math.min(c.maxRenderDistance, current + c.rdStep);

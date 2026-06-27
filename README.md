@@ -179,13 +179,21 @@ safe defaults. Key defaults:
 
 ---
 
-## Compatibility
+## Compatibility — designed as a Sodium sub-pack / companion
 
-StabiliFPS is **client-side only** and never changes anything you can see
-against your will, so it is safe on any server. It composes with Sodium /
-Lithium / FerriteCore (those raise the average; StabiliFPS keeps it flat) and
-with ImmediatelyFast / ModernFix / EntityCulling. It targets the Minecraft
-26.2 line — it will not load on 1.21.x or older.
+StabiliFPS is a **pure companion mod**. It never fights or undoes the gains from
+Sodium, Lithium, FerriteCore, or any other perf mod. If Sodium has boosted your
+effective render distance, chunk loading speed, or FPS, StabiliFPS respects that
+boosted state and only adds stability on top (raise-only logic, boosted-environment
+tuning, automatic companion detection).
+
+It is **client-side only**, safe on any server, and composes cleanly with:
+Sodium, Lithium, FerriteCore, Entity Culling, ModernFix, ImmediatelyFast, Iris, etc.
+
+All active changes are either **pure-good** (pacing/deferral/measurement) or
+**strictly additive/opt-in/raise-only**. Mixins use `require = 0` (graceful no-op on conflict).
+
+It targets the Minecraft 26.2 line — it will not load on 1.21.x or older.
 
 ## License
 

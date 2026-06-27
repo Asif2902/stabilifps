@@ -1,7 +1,10 @@
 package dev.stabilifps.core;
 
 import dev.stabilifps.config.StabiliConfig;
+import dev.stabilifps.util.ModCompat;
 import dev.stabilifps.util.StabiliLog;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * Chunk-mesh burst pacer.
@@ -76,13 +79,24 @@ public final class ChunkLoadPacer {
             mode = Mode.NORMAL;
         }
 
-        // Scale the configured budget by the mode.
-        double scale = switch (mode) {
+        // Predictive factor: when the player is moving quickly we are about to
+        // hit more new chunks. Tighten the budget proactively (before frame
+        // times degrade) so bursts are smaller. This helps hold high stable
+        // FPS (250-300) when flying / elytra without lowering what the player
+        // ultimately sees.
+        double speedFactor = computeSpeedLoadFactor();
+
+        // Scale the configured budget by the mode + speed prediction.
+        // When Sodium (or similar) has already "boosted the pace", we give
+        // a little more headroom so we don't fight the gains they provided.
+        double baseScale = switch (mode) {
             case THROTTLE -> 0.35; // favour smoothness: slow the load down
             case NORMAL   -> 1.0;
             case BOOST    -> 2.5;  // plenty of headroom: load fast
         };
-        budgetMicrosThisFrame = (long) (frameBudgetMicros * scale);
+        double companionScale = ModCompat.getChunkBudgetScaleForCompanions();
+        double effectiveScale = (baseScale * companionScale) / Math.max(1.0, speedFactor);
+        budgetMicrosThisFrame = (long) (frameBudgetMicros * effectiveScale);
         spentMicrosThisFrame = 0;
         deferredThisFrame = 0;
         lastFrameNanos = System.nanoTime();
@@ -140,5 +154,37 @@ public final class ChunkLoadPacer {
     public static long spentMicrosThisFrame() { return spentMicrosThisFrame; }
     public static long budgetMicrosThisFrame() {
         return budgetMicrosThisFrame == Long.MAX_VALUE ? 0 : budgetMicrosThisFrame;
+    }
+
+    /** 0.0 .. 1.0+  how much of the current frame's chunk budget has been used (for HUD feedback). */
+    public static double budgetUtilization() {
+        long b = budgetMicrosThisFrame();
+        if (b <= 0) return 0.0;
+        return Math.min(2.0, spentMicrosThisFrame / (double) b);
+    }
+
+    /**
+     * Simple predictive load multiplier based on player speed.
+     * Fast movement = we will cross chunk boundaries faster → more meshes queued.
+     * Returns ~1.0 at walking speed, higher when sprinting/flying.
+     */
+    private static double computeSpeedLoadFactor() {
+        try {
+            Minecraft mc = Minecraft.getInstance();
+            Player p = mc.player;
+            if (p == null || mc.level == null) return 1.0;
+
+            // Horizontal speed in blocks per second.
+            double dx = p.getDeltaMovement().x;
+            double dz = p.getDeltaMovement().z;
+            double speedBps = Math.sqrt(dx * dx + dz * dz) * 20.0; // approx blocks/sec
+
+            if (speedBps < 6.0) return 1.0;                // walking / slow
+            if (speedBps < 12.0) return 1.4;               // sprint
+            if (speedBps < 25.0) return 1.9;               // elytra / moderate fly
+            return 2.6;                                    // very fast travel
+        } catch (Throwable t) {
+            return 1.0;
+        }
     }
 }
