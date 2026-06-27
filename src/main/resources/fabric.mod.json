@@ -13,7 +13,7 @@
     "issues": "https://github.com/Asif2902/stabilifps/issues"
   },
   "license": "MIT",
-  "icon": "assets/stabilifps/icon.jpg",
+  "icon": "assets/stabilifps/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [
